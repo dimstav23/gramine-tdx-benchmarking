@@ -1,0 +1,66 @@
+# Adapted from the following source:
+# https://github.com/vasanth-intel/gramerf_framework/blob/main/baremetal_benchmarking/config_files/python_resnet.manifest.template
+
+# TensorFlow Lite example
+
+loader.entrypoint = "file:{{ gramine.libos }}"
+libos.entrypoint = "{{ entrypoint }}"
+
+loader.log_level = "{{ log_level }}"
+
+#loader.env.LD_LIBRARY_PATH = "/lib:/lib:{{ arch_libdir }}:/usr/{{ arch_libdir }}"
+loader.env.LD_LIBRARY_PATH = "{{ python.stdlib }}/lib:/lib:{{ arch_libdir }}:/usr/lib:/usr/{{ arch_libdir }}"
+
+loader.env.PATH = "/bin:/usr/bin"
+
+loader.insecure__use_cmdline_argv = true
+loader.insecure__use_host_env = true
+loader.insecure__disable_aslr = true
+
+fs.mounts = [
+  { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
+  { path = "{{ arch_libdir }}", uri = "file:{{ arch_libdir }}" },
+  { path = "/usr", uri = "file:/usr"},
+  { path = "/bin", uri = "file:/bin"},
+  { path = "{{ python.stdlib }}", uri = "file:{{ python.stdlib }}"},
+  { path = "{{ python.distlib }}", uri = "file:{{ python.distlib }}"},
+{% for path in python.get_sys_path(entrypoint) %}
+  { path = "{{ path }}", uri = "file:{{ path }}" },
+{% endfor %}
+  { path = "{{ pythondistpath }}", uri = "file:{{ pythondistpath }}"},
+  { path = "{{ entrypoint }}", uri = "file:{{ entrypoint }}" },
+  { path = "/models", uri = "file:models/"},
+  { path = "/data", uri = "file:data/"},
+  { type = "tmpfs", path = "/tmp"},
+  { path = "/etc", uri = "file:/etc"},
+]
+
+sys.stack.size = "8M"
+
+sgx.enclave_size = "32G"
+sgx.max_threads = 300
+sgx.preheat_enclave = true
+sgx.nonpie_binary = true
+sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+
+sgx.trusted_files = [
+  "file:{{ gramine.runtimedir() }}/",
+  "file:{{ arch_libdir }}/",
+  "file:/usr/{{ arch_libdir }}/",
+  "file:{{ gramine.libos }}",
+  "file:{{ entrypoint }}",
+  "file:{{ python.stdlib }}/",
+  "file:{{ python.distlib }}/",
+  "file:{{ pythondistpath }}/",
+{% for path in python.get_sys_path(entrypoint) %}
+  "file:{{ path }}{{ '/' if path.is_dir() else '' }}",
+{% endfor %}
+]
+
+sgx.allowed_files = [
+  "file:/tmp/",
+  "file:/etc/",
+  "file:/usr/share", # to speed up the experiments
+  "file:models/",
+  "file:data/",
+]

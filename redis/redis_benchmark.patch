@@ -1,0 +1,13 @@
+diff --git a/CI-Examples/redis/redis-server.manifest.template b/CI-Examples/redis/redis-server.manifest.template
+index 58c9dddc..97191e22 100644
+--- a/CI-Examples/redis/redis-server.manifest.template
++++ b/CI-Examples/redis/redis-server.manifest.template
+@@ -18,7 +18,7 @@ loader.log_level = "{{ log_level }}"
+ ################################# ARGUMENTS ###################################
+ 
+ # Hardcode application arguments. See README for explanations.
+-loader.argv = ["redis-server", "--save", ""]
++loader.argv = ["redis-server", "--save", "", "--protected-mode", "no"]
+ 
+ ################################# ENV VARS ####################################
+ 

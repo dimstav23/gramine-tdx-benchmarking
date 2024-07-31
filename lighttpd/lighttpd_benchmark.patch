@@ -1,0 +1,103 @@
+diff --git a/CI-Examples/common_tools/benchmark-http.sh b/CI-Examples/common_tools/benchmark-http.sh
+index d5ab9025..04754c4b 100755
+--- a/CI-Examples/common_tools/benchmark-http.sh
++++ b/CI-Examples/common_tools/benchmark-http.sh
+@@ -11,16 +11,15 @@
+ 
+ declare -A THROUGHPUTS
+ declare -A LATENCIES
++declare -A TOTAL_THROUGHPUTS
+ LOOP=${LOOP:-1}
+ DOWNLOAD_HOST=$1
+ DOWNLOAD_FILE=${DOWNLOAD_FILE:-random/10K.1.html}
+-CONNECTIONS=${CONNECTIONS:-300}
+-REQUESTS=${REQUESTS:-10000}
+-DURATION=${DURATION:-30}
+-CONCURRENCY_LIST=${CONCURRENCY_LIST:-"1 2 4 8 16 32 64 128 256"}
+-RESULT=result-$(date +%y%m%d-%H%M%S)
++CONNECTIONS=${CONNECTIONS:-"1 2 4 8 16 32"}
++DURATION=${DURATION:-30s}
++CONCURRENCY_LIST=${CONCURRENCY_LIST:-"1"}
++CONCURRENCY="1"
+ 
+-touch "$RESULT"
+ convert_throughput() {
+     local THROUGHPUT_VAL=0
+     local THROUGHPUT_UNIT=""
+@@ -72,11 +71,14 @@ latency_in_milliseconds() {
+ RUN=0
+ while [ $RUN -lt "$LOOP" ]
+ do
+-    for CONCURRENCY in $CONCURRENCY_LIST
++    for CLIENTS in $CONNECTIONS
+     do
+         rm -f OUTPUT
+-        echo "wrk -c $CONNECTIONS -d $DURATION -t $CONCURRENCY -R $REQUESTS $DOWNLOAD_HOST/$DOWNLOAD_FILE"
+-        wrk -c "$CONNECTIONS" -d "$DURATION" -t "$CONCURRENCY" -R "$REQUESTS" "$DOWNLOAD_HOST/$DOWNLOAD_FILE" > OUTPUT || exit $?
++        echo "wrk --timeout 5s -c $CLIENTS -d $DURATION -t $CONCURRENCY $DOWNLOAD_HOST/$DOWNLOAD_FILE"
++        wrk --timeout 5s -c "$CLIENTS" -d "$DURATION" -t "$CONCURRENCY" "$DOWNLOAD_HOST/$DOWNLOAD_FILE" > OUTPUT || exit $?
++
++        FILENAME=$(echo $DOWNLOAD_FILE | cut -d '.' -f1 | cut -d '/' -f2)
++        cp OUTPUT OUTPUT_clients_"$CLIENTS"_threads_"$CONCURRENCY"_"$FILENAME"
+ 
+         THROUGHPUT_STR=$(grep -m1 "Req/Sec" OUTPUT | awk '{ print $2 }')
+         THROUGHPUT=$(convert_throughput "$THROUGHPUT_STR")
+@@ -90,25 +92,32 @@ do
+             echo "Latency is zero!"; exit 1;
+         fi
+ 
+-        if [ ${#THROUGHPUTS[$CONCURRENCY]} -eq 0 ] || [ ${#LATENCIES[$CONCURRENCY]} -eq 0 ]; then
+-            THROUGHPUTS[$CONCURRENCY]="$THROUGHPUT"
+-            LATENCIES[$CONCURRENCY]="$LATENCY"
+-        else
+-            THROUGHPUTS[$CONCURRENCY]="${THROUGHPUTS[$CONCURRENCY]} $THROUGHPUT"
+-            LATENCIES[$CONCURRENCY]="${LATENCIES[$CONCURRENCY]} $LATENCY"
++        TOTAL_THROUGHPUT_STR=$(grep -m1 "Requests/sec" OUTPUT | awk '{ print $2 }')
++        TOTAL_THROUGHPUT=$(convert_throughput "$TOTAL_THROUGHPUT_STR")
++        if [ "$TOTAL_THROUGHPUT" = "0" ]; then
++            echo "Total Throughput is zero!"; exit 1;
+         fi
+-        echo "Run = $((RUN+1)) Concurrency = $CONCURRENCY Per thread Throughput (req/sec) = $THROUGHPUT, Latency (ms) = $LATENCY"
++
++        if [ ${#THROUGHPUTS[$CLIENTS]} -eq 0 ] || [ ${#LATENCIES[$CLIENTS]} -eq 0 ]; then
++            THROUGHPUTS[$CLIENTS]="$THROUGHPUT"
++            LATENCIES[$CLIENTS]="$LATENCY"
++            TOTAL_THROUGHPUTS[$CLIENTS]="$TOTAL_THROUGHPUT"
++        else
++            THROUGHPUTS[$CLIENTS]="${THROUGHPUTS[$CLIENTS]} $THROUGHPUT"
++            LATENCIES[$CLIENTS]="${LATENCIES[$CLIENTS]} $LATENCY"
++            TOTAL_THROUGHPUTS[$CLIENTS]="${TOTAL_THROUGHPUTS[$CLIENTS]} $TOTAL_THROUGHPUT"
++         fi
++        echo "Run = $((RUN+1)) Clients = $CLIENTS Concurrency = $CONCURRENCY Per thread Throughput (reqs/sec) = $THROUGHPUT, Latency (ms) = $LATENCY, Total Throughput (reqs/sec) = $TOTAL_THROUGHPUT"
+ 
+     done
+     (( RUN++ ))
+ done
+ 
+-for CONCURRENCY in $CONCURRENCY_LIST
++for CLIENTS in $CONNECTIONS
+ do
+-    THROUGHPUT=$(echo "${THROUGHPUTS[$CONCURRENCY]}" | tr " " "\n" | sort -n | awk '{a[NR]=$0}END{if(NR%2==1)print a[(NR + 1)/2];else print (a[NR/2]+a[NR/2 + 1])/2}')
+-    LATENCY=$(echo "${LATENCIES[$CONCURRENCY]}" | tr " " "\n" | sort -n | awk '{a[NR]=$0}END{if(NR%2==1)print a[(NR + 1)/2];else print (a[NR/2]+a[NR/2 + 1])/2}')
+-    printf "Concurrency = %3d: Per Thread Median Througput (req/sec) = %9.3f, Latency (ms) = %9.3f\n" \
+-        "$CONCURRENCY" "$THROUGHPUT" "$LATENCY" | tee -a "$RESULT"
++    THROUGHPUT=$(echo "${THROUGHPUTS[$CLIENTS]}" | tr " " "\n" | sort -n | awk '{a[NR]=$0}END{if(NR%2==1)print a[(NR + 1)/2];else print (a[NR/2]+a[NR/2 + 1])/2}')
++    TOTAL_THROUGHPUT=$(echo "${TOTAL_THROUGHPUTS[$CLIENTS]}" | tr " " "\n" | sort -n | awk '{a[NR]=$0}END{if(NR%2==1)print a[(NR + 1)/2];else print (a[NR/2]+a[NR/2 + 1])/2}')
++    LATENCY=$(echo "${LATENCIES[$CLIENTS]}" | tr " " "\n" | sort -n | awk '{a[NR]=$0}END{if(NR%2==1)print a[(NR + 1)/2];else print (a[NR/2]+a[NR/2 + 1])/2}')
++    printf "Clients = $CLIENTS Concurrency = %3d: Per Thread Median Throughput (reqs/sec) = %9.3f, Latency (ms) = %9.3f, Total Throughput (reqs/sec) = %9.3f\n" \
++        "$CONCURRENCY" "$THROUGHPUT" "$LATENCY" "$TOTAL_THROUGHPUT"
+ done
+-
+-echo "Result file: $RESULT"
+diff --git a/CI-Examples/lighttpd/Makefile b/CI-Examples/lighttpd/Makefile
+index 21bb13d5..8198c3a6 100644
+--- a/CI-Examples/lighttpd/Makefile
++++ b/CI-Examples/lighttpd/Makefile
+@@ -70,7 +70,6 @@ lighttpd-server.conf:
+ 	@$(RM) $@
+ 	@echo "server.document-root       = \"$(abspath $(INSTALL_DIR))/html\""    >> $@
+ 	@echo "server.port                = $(PORT)"            >> $@
+-	@echo "server.bind                = \"$(HOST)\""        >> $@
+ 
+ lighttpd.conf:
+ 	@$(RM) $@

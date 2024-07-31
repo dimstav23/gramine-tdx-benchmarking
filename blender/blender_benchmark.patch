@@ -1,0 +1,62 @@
+diff --git a/CI-Examples/blender/Makefile b/CI-Examples/blender/Makefile
+index b3830f94..5d6adb9f 100644
+--- a/CI-Examples/blender/Makefile
++++ b/CI-Examples/blender/Makefile
+@@ -66,7 +66,7 @@ $(DATA_DIR)/images:
+ 
+ .PHONY: check
+ check: all
+-	cd $(RUN_DIR) && DATA_DIR=$(DATA_DIR) sh $(PWD)/test_all_scenes.sh
++	cd $(RUN_DIR) && DATA_DIR=$(DATA_DIR) sh $(PWD)/test_all_scenes.sh $(VARIANT) $(THREADS)
+ 
+ .PHONY: clean
+ clean:
+diff --git a/CI-Examples/blender/blender.manifest.template b/CI-Examples/blender/blender.manifest.template
+index 900e9745..b63b0a9c 100644
+--- a/CI-Examples/blender/blender.manifest.template
++++ b/CI-Examples/blender/blender.manifest.template
+@@ -25,8 +25,8 @@ fs.mounts = [
+ sgx.debug = true
+ sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+ sys.stack.size = "8M"
+-sgx.enclave_size = "2048M"
+-sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '64' }}
++sgx.enclave_size = "4G"
++sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '512' }}
+ 
+ sgx.trusted_files = [
+   "file:{{ blender_dir }}/blender",
+diff --git a/CI-Examples/blender/test_all_scenes.sh b/CI-Examples/blender/test_all_scenes.sh
+index 90b7e003..e22982b0 100755
+--- a/CI-Examples/blender/test_all_scenes.sh
++++ b/CI-Examples/blender/test_all_scenes.sh
+@@ -5,6 +5,9 @@
+ 
+ set -e
+ 
++VARIANT=$1
++THREADS=$2
++
+ if test -n "$SGX"
+ then
+     GRAMINE=gramine-sgx
+@@ -12,10 +15,17 @@ else
+     GRAMINE=gramine-direct
+ fi
+ 
++if [ "$VARIANT" = "gramine-tdx" ]; then
++    GRAMINE=gramine-tdx
++elif [ "$VARIANT" = "gramine-vm" ]; then
++    GRAMINE=gramine-vm
++fi
++
+ for i in `ls "$DATA_DIR"/scenes/`;
+ do
+     rm -f "$DATA_DIR"/images/"$i"0001.png
+-    $GRAMINE "../blender" -b /data/scenes/$i -t 4 -F PNG -o /data/images/$i -f 1
+-    # TODO add a better test, probably some diff with a precomputed image
++    $GRAMINE "../blender" -b /data/scenes/$i -t $THREADS -F PNG -o /data/images/$i -f 1 \
++        | grep "Saving" | tee ../results/"$VARIANT"_"$THREADS"_threads.txt
++     # TODO add a better test, probably some diff with a precomputed image
+     [ -f "$DATA_DIR"/images/"$i"0001.png ]
+ done

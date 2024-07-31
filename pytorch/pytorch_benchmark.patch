@@ -1,0 +1,131 @@
+diff --git a/pytorch/pytorch.manifest.template b/pytorch/pytorch.manifest.template
+index 830170e..99bd104 100644
+--- a/pytorch/pytorch.manifest.template
++++ b/pytorch/pytorch.manifest.template
+@@ -11,9 +11,15 @@ loader.log_level = "{{ log_level }}"
+ loader.env.LD_LIBRARY_PATH = "/lib:/usr/lib:{{ arch_libdir }}:/usr/{{ arch_libdir }}"
+ loader.env.HOME = "{{ env.HOME }}"
+ 
++sys.brk.max_size = "512M"
++sys.stack.size = "8M"
++libos.check_invalid_pointers = false
++
+ # Restrict the maximum number of threads to prevent insufficient memory
+ # issue, observed on CentOS/RHEL.
+-loader.env.OMP_NUM_THREADS = "8"
++#loader.env.OMP_NUM_THREADS = "8"
++loader.env.QEMU_CPU_NUM = { passthrough = true }
++loader.env.OMP_NUM_THREADS = { passthrough = true }
+ 
+ loader.insecure__use_cmdline_argv = true
+ 
+@@ -30,8 +36,8 @@ fs.mounts = [
+   { type = "tmpfs", path = "/tmp" },
+ ]
+ 
+-sgx.enclave_size = "4G"
+-sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '32' }}
++sgx.enclave_size = "16G"
++sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '256' }}
+ sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+ 
+ sgx.trusted_files = [
+@@ -54,6 +60,7 @@ sgx.trusted_files = [
+ 
+ sgx.allowed_files = [
+   "file:result.txt",
++  "file:results/"
+ ]
+ 
+ # Gramine optionally provides patched OpenMP runtime library that runs faster inside SGX enclaves
+diff --git a/pytorch/pytorchexample.py b/pytorch/pytorchexample.py
+index 4185ff3..19b76f1 100644
+--- a/pytorch/pytorchexample.py
++++ b/pytorch/pytorchexample.py
+@@ -1,7 +1,13 @@
+ # This PyTorch image classification example is based off
+ # https://www.learnopencv.com/pytorch-for-beginners-image-classification-using-pre-trained-models/
+ 
++import sys
++import time
++import os
+ from torchvision import models
++
++# set OMP_NUM_THREADS to 1 during import to avoid scheduling issues
++os.environ["OMP_NUM_THREADS"] = "1"
+ import torch
+ 
+ # Load the model from a file
+@@ -23,28 +29,58 @@ transform = transforms.Compose([
+ from PIL import Image
+ img = Image.open("input.jpg")
+ 
+-# Apply the transform to the image.
+-img_t = transform(img)
++if len(sys.argv) != 3:
++    print("Usage: ptyhon pytorchexample.py <cpu_count> <experiment_label>")
++    sys.exit(1)
++
++try:
++    cpu_count = int(sys.argv[1])
++except ValueError:
++    print("Error: CPU count must be an int!")
++    sys.exit(1)
++
++experiment_label = sys.argv[2]
++
++# set OMP_NUM_THREADS to the cpu count for the parallel execution
++os.environ["OMP_NUM_THREADS"] = str(cpu_count)
++torch.set_num_threads(cpu_count)
++print("Number of threads: %d" % torch.get_num_threads(), flush=True)
++
++start_time = time.time()
++
++for i in range(0, 1000):
++    # Apply the transform to the image.
++    img_t = transform(img)
++
++    # Magic (not sure what this does).
++    batch_t = torch.unsqueeze(img_t, 0)
+ 
+-# Magic (not sure what this does).
+-batch_t = torch.unsqueeze(img_t, 0)
++    # Prepare the model and run the classifier.
++    alexnet.eval()
++    out = alexnet(batch_t)
+ 
+-# Prepare the model and run the classifier.
+-alexnet.eval()
+-out = alexnet(batch_t)
++    # Sort the predictions.
++    _, indices = torch.sort(out, descending=True)
++
++    # Convert into percentages.
++    percentage = torch.nn.functional.softmax(out, dim=1)[0] * 100
++
++print("--- %.2f seconds ---" % (time.time() - start_time), flush=True)
++
++# Print the exec time.
++with open("results/"+experiment_label+"_"+str(cpu_count)+"_threads.txt", "w") as outfile:
++    outfile.write(str(time.time() - start_time) + " seconds\n")
++    outfile.flush()
++    os.fsync(outfile.fileno())
++print("The execution time result was written to results/"+experiment_label+"_"+str(cpu_count)+"_threads.txt` .")
+ 
+ # Load the classes from disk.
+ with open('classes.txt') as f:
+     classes = [line.strip() for line in f.readlines()]
+ 
+-# Sort the predictions.
+-_, indices = torch.sort(out, descending=True)
+-
+-# Convert into percentages.
+-percentage = torch.nn.functional.softmax(out, dim=1)[0] * 100
+-
+ # Print the 5 most likely predictions.
+ with open("result.txt", "w") as outfile:
+     outfile.write(str([(classes[idx], percentage[idx].item()) for idx in indices[0][:5]]))
+-
++    outfile.flush()
++    os.fsync(outfile.fileno())
+ print("Done. The result was written to `result.txt`.")

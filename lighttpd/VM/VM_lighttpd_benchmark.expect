@@ -1,0 +1,91 @@
+#!/usr/bin/expect -f
+
+# starts guest vm, run benchmarks, poweroff
+set timeout -1
+
+set curr_dir [file normalize [file dirname $argv0]]
+
+# first argument indicates td type: td or efi
+set vm_type [lindex $argv 0];
+# second argument indicates number of cores
+set cores [lindex $argv 1];
+# third argument indicates gigs of memory for the VM
+set memory [lindex $argv 2];
+
+set lighttpd_port 8003
+set fwd_port 8004
+
+set lighttpd_install_dir /root/gramine/CI-Examples/lighttpd/install
+set client_benchmark $curr_dir/../../common/bare-metal/deps/gramine/CI-Examples/common_tools/benchmark-http.sh
+
+exec mkdir -p ${curr_dir}/../results
+
+# Start the guest VM
+spawn sudo numactl --cpunodebind=0 --membind=0 $curr_dir/../../common/VM/run_vm_td.sh -i $curr_dir/../../common/VM/tdx/guest-tools/image/tdx-guest-ubuntu-24.04-generic.qcow2 -t $vm_type -c $cores -m $memory -l
+
+set qemu_id $spawn_id
+
+# Login process
+expect -- "login: "
+# Enter username
+send -- "root\r"
+
+# Enter Password
+expect -- "Password: "
+send -- "123456\r"
+
+# Expect the login to be done
+expect -- "# "
+send -- "cd /root/gramine/CI-Examples/lighttpd\r"
+# Expect the cd to be done
+expect -- "# "
+# wait for the VM (especially the SGX-enabled) to be properly initialized
+# sleep 20
+send -- "make clean && make\r"
+expect -- "# "
+send -- "$lighttpd_install_dir/sbin/lighttpd -D -m $lighttpd_install_dir/lib -f lighttpd.conf\r"
+expect -- "\n"
+
+# Run the client benchmark
+# w/o socat
+sleep 5
+spawn /bin/sh -c "DOWNLOAD_FILE=random/100.1.html numactl --cpunodebind=0 --membind=0 $client_benchmark \
+                  http://192.168.122.76:$lighttpd_port \
+                  | tail -n 6 | tee ${curr_dir}/../results/${vm_type}_${cores}_threads_100.1.html.txt"
+expect -- "$ "
+spawn /bin/sh -c "DOWNLOAD_FILE=random/10K.1.html numactl --cpunodebind=0 --membind=0 $client_benchmark \
+                  http://192.168.122.76:$lighttpd_port \
+                  | tail -n 6 | tee ${curr_dir}/../results/${vm_type}_${cores}_threads_10K.1.html.txt"
+expect -- "$ "
+
+# Run socat
+sleep 5
+# WARNING: 192.168.22.76 is the IP assigned to our VM -- adapt it to your needs
+spawn numactl --cpunodebind=0 --membind=0 socat TCP4-LISTEN:$fwd_port,reuseaddr,fork,backlog=256,nodelay TCP-CONNECT:192.168.122.76:$lighttpd_port
+set socat_id $spawn_id
+
+# Run the client benchmark
+# w/ socat
+sleep 5
+spawn /bin/sh -c "DOWNLOAD_FILE=random/100.1.html numactl --cpunodebind=0 --membind=0 $client_benchmark \
+                  http://127.0.0.1:$fwd_port \
+                  | tail -n 6 | tee ${curr_dir}/../results/socat-${vm_type}_${cores}_threads_100.1.html.txt"
+expect -- "$ "
+spawn /bin/sh -c "DOWNLOAD_FILE=random/10K.1.html numactl --cpunodebind=0 --membind=0 $client_benchmark \
+                  http://127.0.0.1:$fwd_port \
+                  | tail -n 6 | tee ${curr_dir}/../results/socat-${vm_type}_${cores}_threads_10K.1.html.txt"
+expect -- "$ "
+# spawn /bin/sh -c "DOWNLOAD_FILE=random/1M.1.html numactl --cpunodebind=0 --membind=0 $client_benchmark \
+#                   http://127.0.0.1:$fwd_port \
+#                   | tail -n 6 | tee ${curr_dir}/../results/socat-${vm_type}_${cores}_threads_1M.1.html.txt"
+# expect -- "$ "
+
+# Close the socat process
+close -i $socat_id
+
+# Cleanup phase
+# Close the qemu process
+close -i $qemu_id
+
+# wait for a complete VM shutdown
+sleep 10

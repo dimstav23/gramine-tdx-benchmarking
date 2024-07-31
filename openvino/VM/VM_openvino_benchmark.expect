@@ -1,0 +1,54 @@
+#!/usr/bin/expect -f
+
+# starts guest vm, run benchmarks, poweroff
+set timeout -1
+
+set curr_dir [file normalize [file dirname $argv0]]
+
+# first argument indicates td type: td or efi
+set vm_type [lindex $argv 0];
+# second argument indicates number of cores
+set cores [lindex $argv 1];
+# third argument indicates gigs of memory for the VM
+set memory [lindex $argv 2];
+
+# time to run each experiment in seconds
+set experiment_time 20
+# RN50 shape info taken from here: https://docs.openvino.ai/2022.3/omz_models_model_resnet_50_tf.html
+
+# Start the guest VM
+spawn sudo numactl --cpunodebind=0 --membind=0 $curr_dir/../../common/VM/run_vm_td.sh -i $curr_dir/../../common/VM/tdx/guest-tools/image/tdx-guest-ubuntu-24.04-generic.qcow2 -t $vm_type -c $cores -m $memory
+
+# Login process
+expect "login: "
+# Enter username
+send -- "root\r"
+
+# Enter Password
+expect "Password: "
+send -- "123456\r"
+
+# Expect the login to be done
+expect "# "
+send -- "cd /root/examples/openvino\r"
+# Expect the cd to be done
+expect "# "
+# wait for the VM (especially the SGX-enabled) to be properly initialized
+sleep 5
+send -- "make clean && make\r"
+expect -- "# "
+send -- "KMP_AFFINITY=granularity=fine,noverbose,compact,1,0 numactl --cpubind=0 --membind=0 \
+./benchmark_app \
+-m model/resnet_v1-50.xml \
+-d CPU -b 1 -t ${experiment_time} -hint none \
+-nstreams ${cores} -nthreads ${cores} -nireq ${cores}"
+# the quotes in the next command made me do this split for clarity
+send -- { -shape "[1, 224, 224, 3] "}
+send -- "| tail -n 10 | tee ./results/RN50_${vm_type}_${cores}_threads.txt"
+send -- "\r"
+
+# expect the experiment to finish and poweroff the Guest VM
+expect "# "
+send -- "shutdown -h now\r"
+# wait till the VM shuts down
+expect "$ "

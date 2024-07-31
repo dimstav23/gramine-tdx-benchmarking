@@ -1,0 +1,69 @@
+#!/usr/bin/expect -f
+
+# starts guest vm, run benchmarks, poweroff
+set timeout -1
+
+set curr_dir [file normalize [file dirname $argv0]]
+
+# first argument indicates td type: td or efi
+set vm_type [lindex $argv 0];
+# second argument indicates number of cores
+set cores [lindex $argv 1];
+# third argument indicates gigs of memory for the VM
+set memory [lindex $argv 2];
+
+# Start the guest VM
+spawn sudo numactl --cpunodebind=0 --membind=0 $curr_dir/../../common/VM/run_vm_td.sh -i $curr_dir/../../common/VM/tdx/guest-tools/image/tdx-guest-ubuntu-24.04-generic.qcow2 -t $vm_type -c $cores -m $memory
+
+# Login process
+expect "login: "
+# Enter username
+send -- "root\r"
+
+# Enter Password
+expect "Password: "
+send -- "123456\r"
+
+# Expect the login to be done
+expect "# "
+send -- "cd /root/examples/tensorflow\r"
+# Expect the cd to be done
+expect "# "
+# wait for the VM (especially the SGX-enabled) to be properly initialized
+sleep 5
+send -- "make clean\r"
+expect -- "# "
+send -- "OMP_NUM_THREADS=${cores} KMP_AFFINITY=granularity=fine,verbose,compact,1,0 \
+numactl --cpunodebind=0 --membind=0 python3 \
+models/models/language_modeling/tensorflow/bert_large/inference/run_squad.py \
+--init_checkpoint=data/bert_large_checkpoints/model.ckpt-3649 \
+--vocab_file=data/wwm_uncased_L-24_H-1024_A-16/vocab.txt \
+--bert_config_file=data/wwm_uncased_L-24_H-1024_A-16/bert_config.json \
+--predict_file=data/wwm_uncased_L-24_H-1024_A-16/dev-v1.1.json \
+--precision=int8 --output_dir=output/bert-squad-output \
+--predict_batch_size=32 \
+--experimental_gelu=True \
+--optimized_softmax=True \
+--input_graph=data/fp32_bert_squad.pb \
+--do_predict=True \
+--mode=benchmark \
+--inter_op_parallelism_threads=1 \
+--intra_op_parallelism_threads=${cores} \
+| tail -n 4 | tee ./results/Bert_${vm_type}_${cores}_threads.txt\r"
+# expect "# "
+# send -- "OMP_NUM_THREADS=${cores} KMP_AFFINITY=granularity=fine,verbose,compact,1,0 \
+# numactl --cpunodebind=0 --membind=0 python3 \
+# models/models/image_recognition/tensorflow/resnet50v1_5/inference/cpu/eval_image_classifier_inference.py \
+# --input-graph=data/resnet50v1_5_int8_pretrained_model.pb \
+# --num-inter-threads=1 \
+# --num-intra-threads=${cores} \
+# --batch-size=512 \
+# --warmup-steps=50 \
+# --steps=500 \
+# | tail -n 4 | tee ./results/RN50_${vm_type}_${cores}_threads.txt\r"
+
+# expect the experiment to finish and poweroff the Guest VM
+expect "# "
+send -- "shutdown -h now\r"
+# wait till the VM shuts down
+expect "$ "

@@ -1,0 +1,42 @@
+#!/usr/bin/expect -f
+
+# starts guest vm, run benchmarks, poweroff
+set timeout -1
+
+set curr_dir [file normalize [file dirname $argv0]]
+
+set results_dir ${curr_dir}/results
+
+exec mkdir -p ${results_dir}
+
+set runs 10
+
+foreach vm_type {efi td} {
+  for {set i 1} {$i<=$runs} {incr i} {
+    foreach vcpu {4 16} {
+      foreach memory {1G 4G 16G 64G} {
+        set fd [open "${results_dir}/${vm_type}_{vcpu}_${memory}_${i}.txt" w]
+
+        spawn sudo numactl --cpunodebind=0 --membind=0 $curr_dir/../../common/VM/run_vm_td.sh \
+        -i $curr_dir/../../common/VM/tdx/guest-tools/image/tdx-guest-ubuntu-24.04-generic.qcow2 \
+        -t $vm_type -c $vcpu -m $memory
+
+        # Login process
+        expect "login: "
+        send -- "root\r"
+        expect "Password: "
+        send -- "123456\r"
+        # Expect the login to be done
+        expect "# "
+        send -- "systemd-analyze\r"
+        expect "# "
+        # capture the output to the result file
+        puts $fd "$expect_out(buffer)"
+        send -- "shutdown -h now\r"
+        # wait till the VM shuts down
+        expect "$ "
+        close $fd
+      }
+    }
+  }
+}

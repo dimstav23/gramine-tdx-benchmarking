@@ -1,0 +1,21 @@
+diff --git a/CI-Examples/memcached/memcached.manifest.template b/CI-Examples/memcached/memcached.manifest.template
+index 41491d8b..276e2a54 100644
+--- a/CI-Examples/memcached/memcached.manifest.template
++++ b/CI-Examples/memcached/memcached.manifest.template
+@@ -10,6 +10,7 @@ loader.log_level = "{{ log_level }}"
+ 
+ # the only dependency is libevent.so, found under `/usr/{{ arch_libdir }}`
+ loader.env.LD_LIBRARY_PATH = "/lib:/usr/{{ arch_libdir }}"
++loader.insecure__use_cmdline_argv = true
+ 
+ # Gramine by default reports the root user (uid = 0) to applications. This default behavior forces
+ # Memcached to attempt to drop privileges and assume some non-privileged user ID via setuid(), which
+@@ -28,7 +29,7 @@ fs.mounts = [
+ 
+ sgx.debug = true
+ sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+-sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '16' }}
++sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '256' }}
+ 
+ # Memcached does not fail explicitly when enclave memory is exhausted. Instead, Memcached goes into
+ # infinite loop without a listening socket. You can trigger this incorrect behavior by increasing

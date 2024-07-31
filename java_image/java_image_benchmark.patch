@@ -1,0 +1,255 @@
+diff --git a/java_image/ImageProcessing.java b/java_image/ImageProcessing.java
+index db7ad45..bf31949 100644
+--- a/java_image/ImageProcessing.java
++++ b/java_image/ImageProcessing.java
+@@ -2,6 +2,12 @@ import java.awt.Graphics2D;
+ import java.awt.image.BufferedImage;
+ import java.io.File;
+ import java.io.IOException;
++import java.util.ArrayList;
++import java.util.List;
++import java.util.concurrent.Callable;
++import java.util.concurrent.ExecutorService;
++import java.util.concurrent.Executors;
++import java.util.concurrent.Future;
+ import javax.imageio.ImageIO;
+ 
+ public class ImageProcessing {
+@@ -14,6 +20,12 @@ public class ImageProcessing {
+ 
+         String imagePath = args[0];
+ 
++        // Get the number of threads from an environment variable
++        String numThreadsEnv = System.getenv("NUM_THREADS");
++        int numThreads = numThreadsEnv != null ? Integer.parseInt(numThreadsEnv) : Runtime.getRuntime().availableProcessors();
++
++        ExecutorService executorService = Executors.newFixedThreadPool(numThreads);
++
+         try {
+             BufferedImage image = ImageIO.read(new File(imagePath));
+ 
+@@ -26,10 +38,10 @@ public class ImageProcessing {
+             BufferedImage processedImage = resizedImage;
+             for (int i = 0; i < 3; i++) {
+                 processedImage = convertToGrayscale(processedImage);
+-                processedImage = applyGaussianBlur(processedImage, 5);
+-                processedImage = applyGaussianBlur(processedImage, 3);
+-                processedImage = applySharpen(processedImage);
+-                processedImage = detectEdges(processedImage);
++                processedImage = applyGaussianBlur(processedImage, 5, executorService);
++                processedImage = applyGaussianBlur(processedImage, 3, executorService);
++                processedImage = applySharpen(processedImage, executorService);
++                processedImage = detectEdges(processedImage, executorService);
+             }
+ 
+             long endTime = System.currentTimeMillis();
+@@ -41,8 +53,10 @@ public class ImageProcessing {
+             File outputfile = new File("processed_image.jpg");
+             ImageIO.write(processedImage, "jpg", outputfile);
+ 
+-        } catch (IOException e) {
++        } catch (IOException | InterruptedException e) {
+             System.out.println("Error loading or processing image: " + e.getMessage());
++        } finally {
++            executorService.shutdown();
+         }
+     }
+ 
+@@ -62,7 +76,35 @@ public class ImageProcessing {
+         return grayImage;
+     }
+ 
+-    private static BufferedImage applyGaussianBlur(BufferedImage image, int radius) {
++    private static BufferedImage applyGaussianBlur(BufferedImage image, int radius, ExecutorService executorService) throws InterruptedException {
++        int numTasks = Runtime.getRuntime().availableProcessors();
++        int chunkHeight = image.getHeight() / numTasks;
++
++        List<Future<BufferedImage>> futures = new ArrayList<>();
++        for (int i = 0; i < numTasks; i++) {
++            final int startY = i * chunkHeight;
++            final int endY = (i == numTasks - 1) ? image.getHeight() : startY + chunkHeight;
++            Callable<BufferedImage> task = () -> applyGaussianBlurChunk(image, radius, startY, endY);
++            futures.add(executorService.submit(task));
++        }
++
++        BufferedImage result = new BufferedImage(image.getWidth(), image.getHeight(), image.getType());
++        for (Future<BufferedImage> future : futures) {
++            try {
++                BufferedImage chunk = future.get();
++                Graphics2D g = result.createGraphics();
++                g.drawImage(chunk, 0, chunk.getMinY(), null);
++                g.dispose();
++            } catch (Exception e) {
++                e.printStackTrace();
++            }
++        }
++        return result;
++    }
++
++    private static BufferedImage applyGaussianBlurChunk(BufferedImage image, int radius, int startY, int endY) {
++        int width = image.getWidth();
++        int height = image.getHeight();
+         int size = 2 * radius + 1;
+         float[] kernel = new float[size * size];
+         float sigma = 1.0f;
+@@ -78,15 +120,17 @@ public class ImageProcessing {
+             kernel[i] /= sum;
+         }
+ 
+-        BufferedImage blurredImage = new BufferedImage(image.getWidth(), image.getHeight(), image.getType());
+-        for (int y = radius; y < image.getHeight() - radius; y++) {
+-            for (int x = radius; x < image.getWidth() - radius; x++) {
++        BufferedImage blurredImage = new BufferedImage(width, height, image.getType());
++        for (int y = startY; y < endY; y++) {
++            for (int x = 0; x < width; x++) {
+                 float sumR = 0;
+                 float sumG = 0;
+                 float sumB = 0;
+                 for (int ky = -radius; ky <= radius; ky++) {
+                     for (int kx = -radius; kx <= radius; kx++) {
+-                        int rgb = image.getRGB(x + kx, y + ky);
++                        int px = Math.min(Math.max(x + kx, 0), width - 1);
++                        int py = Math.min(Math.max(y + ky, 0), height - 1);
++                        int rgb = image.getRGB(px, py);
+                         sumR += ((rgb >> 16) & 0xff) * kernel[(ky + radius) * size + (kx + radius)];
+                         sumG += ((rgb >> 8) & 0xff) * kernel[(ky + radius) * size + (kx + radius)];
+                         sumB += (rgb & 0xff) * kernel[(ky + radius) * size + (kx + radius)];
+@@ -98,24 +142,53 @@ public class ImageProcessing {
+                 blurredImage.setRGB(x, y, (r << 16) | (g << 8) | b);
+             }
+         }
+-        return blurredImage;
++        return blurredImage.getSubimage(0, startY, width, endY - startY);
+     }
+ 
+-    private static BufferedImage applySharpen(BufferedImage image) {
++    private static BufferedImage applySharpen(BufferedImage image, ExecutorService executorService) throws InterruptedException {
++        int numTasks = Runtime.getRuntime().availableProcessors();
++        int chunkHeight = image.getHeight() / numTasks;
++
++        List<Future<BufferedImage>> futures = new ArrayList<>();
++        for (int i = 0; i < numTasks; i++) {
++            final int startY = i * chunkHeight;
++            final int endY = (i == numTasks - 1) ? image.getHeight() : startY + chunkHeight;
++            Callable<BufferedImage> task = () -> applySharpenChunk(image, startY, endY);
++            futures.add(executorService.submit(task));
++        }
++
++        BufferedImage result = new BufferedImage(image.getWidth(), image.getHeight(), image.getType());
++        for (Future<BufferedImage> future : futures) {
++            try {
++                BufferedImage chunk = future.get();
++                Graphics2D g = result.createGraphics();
++                g.drawImage(chunk, 0, chunk.getMinY(), null);
++                g.dispose();
++            } catch (Exception e) {
++                e.printStackTrace();
++            }
++        }
++        return result;
++    }
++
++    private static BufferedImage applySharpenChunk(BufferedImage image, int startY, int endY) {
+         float[] sharpenKernel = {
+             0, -1, 0,
+             -1, 5, -1,
+             0, -1, 0
+         };
+-        BufferedImage sharpenedImage = new BufferedImage(image.getWidth(), image.getHeight(), image.getType());
+-        for (int y = 1; y < image.getHeight() - 1; y++) {
+-            for (int x = 1; x < image.getWidth() - 1; x++) {
++        int width = image.getWidth();
++        BufferedImage sharpenedImage = new BufferedImage(width, endY - startY, image.getType());
++        for (int y = startY; y < endY; y++) {
++            for (int x = 0; x < width; x++) {
+                 float sumR = 0;
+                 float sumG = 0;
+                 float sumB = 0;
+                 for (int ky = -1; ky <= 1; ky++) {
+                     for (int kx = -1; kx <= 1; kx++) {
+-                        int rgb = image.getRGB(x + kx, y + ky);
++                        int px = Math.min(Math.max(x + kx, 0), width - 1);
++                        int py = Math.min(Math.max(y + ky, 0), image.getHeight() - 1);
++                        int rgb = image.getRGB(px, py);
+                         float weight = sharpenKernel[(ky + 1) * 3 + (kx + 1)];
+                         sumR += ((rgb >> 16) & 0xff) * weight;
+                         sumG += ((rgb >> 8) & 0xff) * weight;
+@@ -125,30 +198,59 @@ public class ImageProcessing {
+                 int r = Math.min(Math.max((int) sumR, 0), 255);
+                 int g = Math.min(Math.max((int) sumG, 0), 255);
+                 int b = Math.min(Math.max((int) sumB, 0), 255);
+-                sharpenedImage.setRGB(x, y, (r << 16) | (g << 8) | b);
++                sharpenedImage.setRGB(x, y - startY, (r << 16) | (g << 8) | b);
+             }
+         }
+         return sharpenedImage;
+     }
+ 
+-    private static BufferedImage detectEdges(BufferedImage image) {
++    private static BufferedImage detectEdges(BufferedImage image, ExecutorService executorService) throws InterruptedException {
++        int numTasks = Runtime.getRuntime().availableProcessors();
++        int chunkHeight = image.getHeight() / numTasks;
++
++        List<Future<BufferedImage>> futures = new ArrayList<>();
++        for (int i = 0; i < numTasks; i++) {
++            final int startY = i * chunkHeight;
++            final int endY = (i == numTasks - 1) ? image.getHeight() : startY + chunkHeight;
++            Callable<BufferedImage> task = () -> detectEdgesChunk(image, startY, endY);
++            futures.add(executorService.submit(task));
++        }
++
++        BufferedImage result = new BufferedImage(image.getWidth(), image.getHeight(), image.getType());
++        for (Future<BufferedImage> future : futures) {
++            try {
++                BufferedImage chunk = future.get();
++                Graphics2D g = result.createGraphics();
++                g.drawImage(chunk, 0, chunk.getMinY(), null);
++                g.dispose();
++            } catch (Exception e) {
++                e.printStackTrace();
++            }
++        }
++        return result;
++    }
++
++    private static BufferedImage detectEdgesChunk(BufferedImage image, int startY, int endY) {
+         float[] sobelX = {-1, 0, 1, -2, 0, 2, -1, 0, 1};
+         float[] sobelY = {-1, -2, -1, 0, 0, 0, 1, 2, 1};
+         
+-        BufferedImage edgeImage = new BufferedImage(image.getWidth(), image.getHeight(), image.getType());
+-        for (int y = 1; y < image.getHeight() - 1; y++) {
+-            for (int x = 1; x < image.getWidth() - 1; x++) {
++        int width = image.getWidth();
++        BufferedImage edgeImage = new BufferedImage(width, endY - startY, image.getType());
++        for (int y = startY; y < endY; y++) {
++            for (int x = 0; x < width; x++) {
+                 float sumX = 0;
+                 float sumY = 0;
+                 for (int ky = -1; ky <= 1; ky++) {
+                     for (int kx = -1; kx <= 1; kx++) {
+-                        int rgb = image.getRGB(x + kx, y + ky) & 0xff;
++                        int px = Math.min(Math.max(x + kx, 0), width - 1);
++                        int py = Math.min(Math.max(y + ky, 0), image.getHeight() - 1);
++                        int rgb = image.getRGB(px, py) & 0xff;
+                         sumX += rgb * sobelX[(ky + 1) * 3 + (kx + 1)];
+                         sumY += rgb * sobelY[(ky + 1) * 3 + (kx + 1)];
+                     }
+                 }
+                 int magnitude = Math.min(Math.max((int) Math.sqrt(sumX * sumX + sumY * sumY), 0), 255);
+-                edgeImage.setRGB(x, y, (magnitude << 16) | (magnitude << 8) | magnitude);
++                edgeImage.setRGB(x, y - startY, (magnitude << 16) | (magnitude << 8) | magnitude);
+             }
+         }
+         return edgeImage;
+diff --git a/java_image/java.manifest.template b/java_image/java.manifest.template
+index feb454e..b9aad9b 100644
+--- a/java_image/java.manifest.template
++++ b/java_image/java.manifest.template
+@@ -9,6 +9,7 @@ loader.log_level = "{{ log_level }}"
+ loader.insecure__use_cmdline_argv = true
+ 
+ loader.env.LD_LIBRARY_PATH = "/lib:{{ arch_libdir }}:/usr/lib:/usr/{{ arch_libdir }}"
++loader.env.NUM_THREADS = { passthrough = true }
+ 
+ fs.mounts = [
+   { uri = "file:{{ gramine.runtimedir() }}", path = "/lib" },

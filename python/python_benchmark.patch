@@ -1,0 +1,102 @@
+diff --git a/CI-Examples/python/python.manifest.template b/CI-Examples/python/python.manifest.template
+index de5ea999..17c12bfd 100644
+--- a/CI-Examples/python/python.manifest.template
++++ b/CI-Examples/python/python.manifest.template
+@@ -13,7 +13,10 @@ loader.env.LD_LIBRARY_PATH = "/lib:/lib:{{ arch_libdir }}:/usr/{{ arch_libdir }}
+ # Python's NumPy spawns as many threads as there are CPU cores, and each thread
+ # consumes a chunk of memory, so on large machines 1G enclave size may be not enough.
+ # We limit the number of spawned threads via OMP_NUM_THREADS env variable.
+-loader.env.OMP_NUM_THREADS = "4"
++loader.env.OMP_NUM_THREADS = { passthrough = true }
++# Similarly with the scipy via the OPENBLAS_NUM_THREADS
++loader.env.OPENBLAS_NUM_THREADS = { passthrough = true }
++loader.env.QEMU_CPU_NUM = { passthrough = true }
+ 
+ loader.insecure__use_cmdline_argv = true
+ 
+@@ -32,13 +35,13 @@ fs.mounts = [
+   { type = "tmpfs", path = "/tmp" },
+ ]
+ 
+-sys.stack.size = "2M"
++sys.stack.size = "8M"
+ sys.enable_extra_runtime_domain_names_conf = true
+ 
+ sgx.debug = true
+ sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+-sgx.enclave_size = "1G"
+-sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '32' }}
++sgx.enclave_size = "8G"
++sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '256' }}
+ 
+ sgx.remote_attestation = "{{ ra_type }}"
+ sgx.ra_client_spid = "{{ ra_client_spid }}"
+diff --git a/CI-Examples/python/scripts/test-numpy.py b/CI-Examples/python/scripts/test-numpy.py
+index c7b37094..b61fae3e 100644
+--- a/CI-Examples/python/scripts/test-numpy.py
++++ b/CI-Examples/python/scripts/test-numpy.py
+@@ -5,19 +5,20 @@
+ 
+ import timeit
+ 
+++setup = """\
++import os
++omp_num_threads = str(os.getenv("OMP_NUM_THREADS", os.cpu_count()))
++# set number of threads to 1 during import to avoid import scheduling issues
++os.environ["OMP_NUM_THREADS"] = "1"
+ import numpy
+ 
+-try:
+-    import numpy.core._dotblas
+-except ImportError:
+-    pass
+-
+-print("numpy version: " + numpy.__version__)
++# set back number of threads for the parallel execution
++os.environ["OMP_NUM_THREADS"] = omp_num_threads
++print("Number of threads: %d" % int(omp_num_threads), flush=True)
+ 
+ x = numpy.random.random((1000, 1000))
++"""
+ 
+-setup = "import numpy; x = numpy.random.random((1000, 1000))"
+-count = 5
+-
++count = 1000
+ t = timeit.Timer("numpy.dot(x, x.T)", setup=setup)
+ print("numpy.dot: " + str(t.timeit(count)/count) + " sec")
+diff --git a/CI-Examples/python/scripts/test-scipy.py b/CI-Examples/python/scripts/test-scipy.py
+index cadc107a..e01384a3 100644
+--- a/CI-Examples/python/scripts/test-scipy.py
++++ b/CI-Examples/python/scripts/test-scipy.py
+@@ -6,15 +6,25 @@
+ import timeit
+ 
+ setup = """\
++import os
++omp_num_threads = str(os.getenv("OMP_NUM_THREADS", os.cpu_count()))
++# set number of threads to 1 during import to avoid import scheduling issues
++os.environ["OMP_NUM_THREADS"] = "1"
+ import numpy
+ import scipy.linalg as linalg
+-x = numpy.random.random((100,100))
++import scipy.fft as fft
++# set back number of threads for the parallel execution
++os.environ["OMP_NUM_THREADS"] = omp_num_threads
++print("Number of threads: %d" % int(omp_num_threads), flush=True)
++x = numpy.random.random((1000,1000))
+ z = numpy.dot(x, x.T)
+ """
+-count = 5
+ 
+-t = timeit.Timer("linalg.cholesky(z, lower=True)", setup=setup)
+-print("linalg.cholesky: " + str(t.timeit(count)/count) + "sec")
++count = 1000
++t = timeit.Timer("fft.fft2(z)", setup=setup)
++print("fft.fft2: " + str(t.timeit(count)/count) + " sec")
+ 
++# Reduce the count as it takes a lot of time to run otherwise
++count = 100
+ t = timeit.Timer("linalg.svd(z)", setup=setup)
+-print("linalg.svd: " + str(t.timeit(count)/count) + "sec")
++print("linalg.svd: " + str(t.timeit(count)/count) + " sec")

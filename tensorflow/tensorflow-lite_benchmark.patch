@@ -1,0 +1,105 @@
+diff --git a/tensorflow-lite/Makefile b/tensorflow-lite/Makefile
+index 3ec72b5..c9d0754 100644
+--- a/tensorflow-lite/Makefile
++++ b/tensorflow-lite/Makefile
+@@ -9,8 +9,8 @@ ARCH_LIBDIR ?= /lib/$(shell $(CC) -dumpmachine)
+ TF_DIR ?= tensorflow
+ BAZEL_BIN ?= $(HOME)/bin/bazel
+ 
+-GIT_COMMIT ?= v1.9.0
+-TAR_SHA256 ?= ffc3151b06823d57b4a408261ba8efe53601563dfe93af0866751d4f6ca5068c
++GIT_COMMIT ?= v2.14.0
++TAR_SHA256 ?= ce357fd0728f0d1b0831d1653f475591662ec5bca736a94ff789e6b1944df19f
+ 
+ ifeq ($(DEBUG),1)
+ GRAMINE_LOG_LEVEL = debug
+@@ -32,32 +32,29 @@ endif
+ 
+ $(TF_DIR)/configure:
+ 	../common_tools/download --output tensorflow.tar.gz --sha256 $(TAR_SHA256)\
+-		--url https://github.com/tensorflow/tensorflow/archive/$(GIT_COMMIT).tar.gz
++		--url https://github.com/tensorflow/tensorflow/archive/refs/tags/$(GIT_COMMIT).tar.gz
+ 	mkdir $(TF_DIR)
+ 	tar -C $(TF_DIR) --strip-components=1 -xf tensorflow.tar.gz
+ 
+-$(TF_DIR)/bazel-bin/tensorflow/contrib/lite/examples/label_image/label_image: $(TF_DIR)/configure
+-	cd $(TF_DIR) && $(BAZEL_BIN) build tensorflow/contrib/lite/examples/label_image
++$(TF_DIR)/bazel-bin/tensorflow/lite/examples/label_image/label_image: $(TF_DIR)/configure
++	cd $(TF_DIR) && $(BAZEL_BIN) build -c opt //tensorflow/lite/examples/label_image:label_image
+ 
+-label_image: $(TF_DIR)/bazel-bin/tensorflow/contrib/lite/examples/label_image/label_image
++label_image: $(TF_DIR)/bazel-bin/tensorflow/lite/examples/label_image/label_image
+ 	cp $^ .
+ 
+-libtensorflow_framework.so: label_image
+-	cp $(TF_DIR)/bazel-bin/tensorflow/libtensorflow_framework.so $@
+-
+ INCEPTION_HASH=b1a1f91276e48a9ddf0cb0d854f044ebfbf985dc2c2cedceb52b3d668894299a
+ inception_v3.tflite:
+ 	../common_tools/download --output inception_v3_2018_04_27.tgz --sha256 $(INCEPTION_HASH)\
+ 		--url https://storage.googleapis.com/download.tensorflow.org/models/tflite/model_zoo/upload_20180427/inception_v3_2018_04_27.tgz
+ 	tar xfz inception_v3_2018_04_27.tgz
+ 
+-labels.txt: $(TF_DIR)/tensorflow/contrib/lite/java/ovic/src/testdata/labels.txt
++labels.txt: $(TF_DIR)/tensorflow/lite/java/ovic/src/testdata/labels.txt
+ 	cp $^ $@
+ 
+-image.bmp: $(TF_DIR)/tensorflow/contrib/lite/examples/label_image/testdata/grace_hopper.bmp
++image.bmp: $(TF_DIR)/tensorflow/lite/examples/label_image/testdata/grace_hopper.bmp
+ 	cp $^ $@
+ 
+-label_image.manifest: label_image.manifest.template libtensorflow_framework.so label_image \
++label_image.manifest: label_image.manifest.template label_image \
+                       inception_v3.tflite labels.txt image.bmp
+ 	gramine-manifest \
+ 		-Dlog_level=$(GRAMINE_LOG_LEVEL) \
+@@ -96,24 +93,24 @@ clean:
+ distclean: clean
+ 	$(RM) -r label_image
+ 	$(RM) inception_v3_2018_04_27.tgz inception_v3.pb inception_v3.tflite labels.txt image.bmp
+-	$(RM) -r $(TF_DIR) tensorflow.tar.gz libtensorflow_framework.so bazel-*-installer-linux-*.sh
++	$(RM) -r $(TF_DIR) tensorflow.tar.gz bazel-*-installer-linux-*.sh
+ 
+-BAZEL_INSTALLER_HASH=17ab70344645359fd4178002f367885e9019ae7507c9c1ade8220f3628383444
++BAZEL_INSTALLER_HASH=b8cbaddf0fbf74cea00c0be2cbb0a0634e6a52a13b5bd7894c8d614d90b08141
+ .PHONY: install-dependencies-ubuntu
+ install-dependencies-ubuntu:
+ 	apt-get update
+-	apt-get install -y python-dev python-pip wget git
++	apt-get install -y python3 python3-pip wget git python-dev-is-python3
+ 	# https://docs.bazel.build/versions/master/install-ubuntu.html
+-	apt-get install -y pkg-config zip g++ zlib1g-dev unzip python
+-	../common_tools/download --output bazel-0.16.1-installer-linux-x86_64.sh --sha256 $(BAZEL_INSTALLER_HASH)\
+-		--url https://github.com/bazelbuild/bazel/releases/download/0.16.1/bazel-0.16.1-installer-linux-x86_64.sh
+-	chmod +x bazel-0.16.1-installer-linux-x86_64.sh
+-	./bazel-0.16.1-installer-linux-x86_64.sh --user
++	apt-get install -y pkg-config zip g++ zlib1g-dev unzip
++	../common_tools/download --output bazel-6.1.0-installer-linux-x86_64.sh --sha256 $(BAZEL_INSTALLER_HASH)\
++		--url https://github.com/bazelbuild/bazel/releases/download/6.1.0/bazel-6.1.0-installer-linux-x86_64.sh
++	chmod +x bazel-6.1.0-installer-linux-x86_64.sh
++	./bazel-6.1.0-installer-linux-x86_64.sh --user
+ 
+ .PHONY: install-dependencies-fedora
+ install-dependencies-fedora:
+ 	dnf -y install python3-devel python3-pip wget git pkg-config zip gcc-g++ zlib-devel unzip
+-	../common_tools/download --output bazel-0.16.1-installer-linux-x86_64.sh --sha256 $(BAZEL_INSTALLER_HASH)\
+-		--url https://github.com/bazelbuild/bazel/releases/download/0.16.1/bazel-0.16.1-installer-linux-x86_64.sh
+-	chmod +x bazel-0.16.1-installer-linux-x86_64.sh
+-	./bazel-0.16.1-installer-linux-x86_64.sh --user
++	../common_tools/download --output bazel-6.1.0-installer-linux-x86_64.sh --sha256 $(BAZEL_INSTALLER_HASH)\
++		--url https://github.com/bazelbuild/bazel/releases/download/6.1.0/bazel-6.1.0-installer-linux-x86_64.sh
++	chmod +x bazel-6.1.0-installer-linux-x86_64.sh
++	./bazel-6.1.0-installer-linux-x86_64.sh --user
+diff --git a/tensorflow-lite/label_image.manifest.template b/tensorflow-lite/label_image.manifest.template
+index 1ca5abc..601eca3 100644
+--- a/tensorflow-lite/label_image.manifest.template
++++ b/tensorflow-lite/label_image.manifest.template
+@@ -28,7 +28,7 @@ sgx.trusted_files = [
+   "file:{{ gramine.runtimedir() }}/",
+   "file:{{ arch_libdir }}/",
+   "file:/usr/{{ arch_libdir }}/",
+-  "file:libtensorflow_framework.so",
++  #"file:libtensorflow_framework.so",
+   "file:inception_v3.tflite",
+   "file:labels.txt",
+ ]

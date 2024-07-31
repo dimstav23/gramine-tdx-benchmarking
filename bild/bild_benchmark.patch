@@ -1,0 +1,52 @@
+diff --git a/bild/bild_bench.manifest.template b/bild/bild_bench.manifest.template
+index 882d35d..cf44cd2 100644
+--- a/bild/bild_bench.manifest.template
++++ b/bild/bild_bench.manifest.template
+@@ -7,6 +7,7 @@ loader.entrypoint = "file:{{ gramine.libos }}"
+ libos.entrypoint = "bild_bench"
+ 
+ loader.log_level = "{{ log_level }}"
++loader.env.GOMAXPROCS = { passthrough = true }
+ 
+ sys.enable_sigterm_injection = true
+ 
+@@ -17,8 +18,8 @@ fs.mounts = [
+   { path = "/watermark.png", uri = "file:watermark.png" },
+ ]
+ 
+-sgx.enclave_size = "4G"
+-sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '16' }}
++sgx.enclave_size = "32G"
++sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '64' }}
+ sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+ 
+ sgx.trusted_files = [
+diff --git a/bild/main.go b/bild/main.go
+index 76f0bb2..1e17129 100644
+--- a/bild/main.go
++++ b/bild/main.go
+@@ -4,6 +4,9 @@ import (
+ 	"image"
+ 	"image/color"
+ 	"log"
++	"os"
++	"runtime"
++	"strconv"
+ 	"time"
+ 
+ 	"github.com/anthonynsimon/bild/blend"
+@@ -60,6 +63,14 @@ func processImage(inputPath, watermarkPath, outputPath string) error {
+ }
+ 
+ func main() {
++
++	// Set GOMAXPROCS from an environment variable
++	if maxProcsStr, exists := os.LookupEnv("GOMAXPROCS"); exists {
++		if maxProcs, err := strconv.Atoi(maxProcsStr); err == nil {
++			runtime.GOMAXPROCS(maxProcs)
++		}
++	}
++
+ 	startTime := time.Now()
+ 	err := processImage("input.png", "watermark.png", "output.png")
+ 	if err != nil {

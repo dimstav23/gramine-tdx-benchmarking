@@ -1,0 +1,103 @@
+diff --git a/CI-Examples/sqlite/Makefile b/CI-Examples/sqlite/Makefile
+index 13f37340..af4a5874 100644
+--- a/CI-Examples/sqlite/Makefile
++++ b/CI-Examples/sqlite/Makefile
+@@ -10,25 +10,29 @@ GRAMINE_LOG_LEVEL = error
+ endif
+ 
+ .PHONY: all
+-all: sqlite3.manifest
++all: kvtest kvtest.manifest
+ ifeq ($(SGX),1)
+-all: sqlite3.manifest.sgx sqlite3.sig
++all: kvtest kvtest.manifest.sgx kvtest.sig
+ endif
+ 
+-sqlite3.manifest: manifest.template
++# Compile command: https://www.sqlite.org/fasterthanfs.html
++kvtest: kvtest.c sqlite3.c sqlite3.h
++	gcc -Os -I. -DSQLITE_DIRECT_OVERFLOW_READ \
++  kvtest.c sqlite3.c -o kvtest -ldl -lpthread
++
++kvtest.manifest: manifest.template
+ 	gramine-manifest \
+ 		-Dlog_level=$(GRAMINE_LOG_LEVEL) \
+-		-Dexecdir=$(shell dirname $(shell which sqlite3)) \
+ 		-Darch_libdir=$(ARCH_LIBDIR) \
+ 		$< >$@
+ 
+ # Make on Ubuntu <= 20.04 doesn't support "Rules with Grouped Targets" (`&:`),
+ # see the helloworld example for details on this workaround.
+-sqlite3.manifest.sgx sqlite3.sig: sgx_sign
++kvtest.manifest.sgx kvtest.sig: sgx_sign
+ 	@:
+ 
+ .INTERMEDIATE: sgx_sign
+-sgx_sign: sqlite3.manifest
++sgx_sign: kvtest.manifest
+ 	gramine-sgx-sign \
+ 		--manifest $< \
+ 		--output $<.sgx
+@@ -56,7 +60,7 @@ regression: all
+ 
+ .PHONY: clean
+ clean:
+-	$(RM) *.manifest *.manifest.sgx *.token *.sig OUTPUT db/*
++	$(RM) *.manifest *.manifest.sgx *.token *.sig OUTPUT db/* kvtest
+ 
+ .PHONY: distclean
+ distclean: clean
+diff --git a/CI-Examples/sqlite/manifest.template b/CI-Examples/sqlite/manifest.template
+index 51654c4d..2892960b 100644
+--- a/CI-Examples/sqlite/manifest.template
++++ b/CI-Examples/sqlite/manifest.template
+@@ -3,24 +3,23 @@
+ 
+ # This is a general manifest template for running SQLite.
+ 
+-libos.entrypoint = "{{ execdir }}/sqlite3"
++libos.entrypoint = "/kvtest"
+ 
+ loader.log_level = "{{ log_level }}"
+ 
+-loader.argv = ["sqlite3", "/db/test.db"]
+-
+ loader.env.LD_LIBRARY_PATH = "/lib:{{ arch_libdir }}"
+-loader.env.PATH = "{{ execdir }}"
+ # Set HOME to suppress "warning: cannot find home directory; cannot read ~/.sqliterc"
+ loader.env.HOME = "/"
+ 
++loader.insecure__use_cmdline_argv = true
++
+ fs.mounts = [
+   { path = "/lib", uri = "file:{{ gramine.runtimedir() }}" },
+   { path = "{{ arch_libdir }}", uri = "file:{{ arch_libdir }}" },
+-  { path = "{{ execdir }}/sqlite3", uri = "file:{{ execdir }}/sqlite3" },
++  { path = "/kvtest", uri = "file:kvtest" },
+ 
+   # SQLite creates several helper files for the DB, so we specify a path instead of a single file
+-  { type = "encrypted", path = "/db/", uri = "file:db/", key_name = "default" },
++  #{ type = "encrypted", path = "/db/", uri = "file:db/", key_name = "default" },
+ ]
+ 
+ # Unfortunately, non-SGX Gramine cannot use special keys such as "_sgx_mrenclave", so for this
+@@ -30,12 +29,16 @@ fs.insecure__keys.default = "ffeeddccbbaa99887766554433221100"
+ 
+ sgx.debug = true
+ sgx.edmm_enable = {{ 'true' if env.get('EDMM', '0') == '1' else 'false' }}
+-sgx.enclave_size = "256M"
+-sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '4' }}
++sgx.enclave_size = "4G"
++sgx.max_threads = {{ '1' if env.get('EDMM', '0') == '1' else '256' }}
+ 
+ sgx.trusted_files = [
+-  "file:{{ execdir }}/sqlite3",
++  "file:kvtest",
+   "file:{{ gramine.runtimedir() }}/",
+   "file:{{ arch_libdir }}/",
+   "file:scripts/",
+ ]
++
++sgx.allowed_files = [
++  "file:db/test.db",
++]
