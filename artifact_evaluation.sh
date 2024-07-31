@@ -4,7 +4,6 @@ set -e
 
 THIS_DIR=$(dirname "$(readlink -f "$0")")
 
------- start of new apps
 cd $THIS_DIR/bild
 ./automated_runner.sh
 
@@ -19,9 +18,6 @@ cd $THIS_DIR/blender
 
 cd $THIS_DIR/pytorch
 ./automated_runner.sh
-
-# # cd $THIS_DIR/python
-# # ./automated_runner.sh
 
 cd $THIS_DIR/sqlite
 ./automated_runner.sh
@@ -49,7 +45,7 @@ cd $THIS_DIR/plots
 ./plot_generator.sh
 
 # Run the microbenchmark
-# cd $THIS_DIR/microbenchmarks/startup-time
-# ./measure_gramine_startup_time.sh
-# ./measure_VM_startup_time.expect
-# python pretty_print_results.py
+cd $THIS_DIR/microbenchmarks/startup-time
+./measure_gramine_startup_time.sh
+./measure_VM_startup_time.expect
+python pretty_print_results.py
