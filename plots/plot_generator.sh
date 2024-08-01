@@ -7,24 +7,24 @@ GENERATOR_SCRIPT=$THIS_DIR/generate_plots.py
 
 # bild
 python3 -W ignore $GENERATOR_SCRIPT -d ../bild/results_gramine_tdx_1_6_1/ -a bild -e default -n absolute -m LIB -x threads -l "upper right" -t bild_single_res
-python3 -W ignore $GENERATOR_SCRIPT -d ../bild/results_gramine_tdx_1_6_1/ -a bild -e default -n absolute -m LIB -x threads -l "upper right" -t bild
-python3 -W ignore $GENERATOR_SCRIPT -d ../bild/results_gramine_tdx_1_6_1/ -a bild -e default -m LIB -x threads -l "upper right" -t bild_no_annot
-python3 -W ignore $GENERATOR_SCRIPT -d ../bild/results_gramine_tdx_1_6_1/ -a bild -e default -n absolute -m LIB -x threads -l "upper right" --error_bar -t bild_error_bars
-python3 -W ignore $GENERATOR_SCRIPT -d ../bild/results_gramine_tdx_1_6_1/ -a bild -e default -n overhead -m LIB -x threads -l "upper right" -t bild_overhead
+python3 -W ignore $GENERATOR_SCRIPT -d ../bild/results_gramine_tdx_1_6_1/:../bild/results_gramine_tdx_1_6_2/:../bild/results_gramine_tdx_1_6_3/ -a bild -e default -n absolute -m LIB -x threads -l "upper right" -t bild
+python3 -W ignore $GENERATOR_SCRIPT -d ../bild/results_gramine_tdx_1_6_1/:../bild/results_gramine_tdx_1_6_2/:../bild/results_gramine_tdx_1_6_3/ -a bild -e default -m LIB -x threads -l "upper right" -t bild_no_annot
+python3 -W ignore $GENERATOR_SCRIPT -d ../bild/results_gramine_tdx_1_6_1/:../bild/results_gramine_tdx_1_6_2/:../bild/results_gramine_tdx_1_6_3/ -a bild -e default -n absolute -m LIB -x threads -l "upper right" --error_bar -t bild_error_bars
+python3 -W ignore $GENERATOR_SCRIPT -d ../bild/results_gramine_tdx_1_6_1/:../bild/results_gramine_tdx_1_6_2/:../bild/results_gramine_tdx_1_6_3/ -a bild -e default -n overhead -m LIB -x threads -l "upper right" -t bild_overhead
 
 # java_image
 python3 -W ignore $GENERATOR_SCRIPT -d ../java_image/results_gramine_tdx_1_6_1/ -a java_image -e default -n absolute -m LIB -x threads -l "upper right" -t java_image_single_res
-python3 -W ignore $GENERATOR_SCRIPT -d ../java_image/results_gramine_tdx_1_6_1/ -a java_image -e default -n absolute -m LIB -x threads -l "upper right" -t java_image
-python3 -W ignore $GENERATOR_SCRIPT -d ../java_image/results_gramine_tdx_1_6_1/ -a java_image -e default -m LIB -x threads -l "upper right" -t java_image_no_annot
-python3 -W ignore $GENERATOR_SCRIPT -d ../java_image/results_gramine_tdx_1_6_1/ -a java_image -e default -n absolute -m LIB -x threads -l "upper right" --error_bar -t java_image_error_bars
-python3 -W ignore $GENERATOR_SCRIPT -d ../java_image/results_gramine_tdx_1_6_1/ -a java_image -e default -n overhead -m LIB -x threads -l "upper right" -t java_image_overhead
+python3 -W ignore $GENERATOR_SCRIPT -d ../java_image/results_gramine_tdx_1_6_1/:../java_image/results_gramine_tdx_1_6_2/:../java_image/results_gramine_tdx_1_6_3/ -a java_image -e default -n absolute -m LIB -x threads -l "upper right" -t java_image
+python3 -W ignore $GENERATOR_SCRIPT -d ../java_image/results_gramine_tdx_1_6_1/:../java_image/results_gramine_tdx_1_6_2/:../java_image/results_gramine_tdx_1_6_3/ -a java_image -e default -m LIB -x threads -l "upper right" -t java_image_no_annot
+python3 -W ignore $GENERATOR_SCRIPT -d ../java_image/results_gramine_tdx_1_6_1/:../java_image/results_gramine_tdx_1_6_2/:../java_image/results_gramine_tdx_1_6_3/ -a java_image -e default -n absolute -m LIB -x threads -l "upper right" --error_bar -t java_image_error_bars
+python3 -W ignore $GENERATOR_SCRIPT -d ../java_image/results_gramine_tdx_1_6_1/:../java_image/results_gramine_tdx_1_6_2/:../java_image/results_gramine_tdx_1_6_3/ -a java_image -e default -n overhead -m LIB -x threads -l "upper right" -t java_image_overhead
 
 # candle
 python3 -W ignore $GENERATOR_SCRIPT -d ../candle/results_gramine_tdx_1_6_1/ -a candle -e default -n absolute -m HIB -x threads -l "upper right" -t candle_single_res
-python3 -W ignore $GENERATOR_SCRIPT -d ../candle/results_gramine_tdx_1_6_1/ -a candle -e default -n absolute -m HIB -x threads -l "upper right" -t candle
-python3 -W ignore $GENERATOR_SCRIPT -d ../candle/results_gramine_tdx_1_6_1/ -a candle -e default -m HIB -x threads -l "upper right" -t candle_no_annot
-python3 -W ignore $GENERATOR_SCRIPT -d ../candle/results_gramine_tdx_1_6_1/ -a candle -e default -n absolute -m HIB -x threads -l "upper right" --error_bar -t candle_error_bars
-python3 -W ignore $GENERATOR_SCRIPT -d ../candle/results_gramine_tdx_1_6_1/ -a candle -e default -n overhead -m HIB -x threads -l "upper right" -t candle_overhead
+python3 -W ignore $GENERATOR_SCRIPT -d ../candle/results_gramine_tdx_1_6_1/:../candle/results_gramine_tdx_1_6_2/:../candle/results_gramine_tdx_1_6_3/ -a candle -e default -n absolute -m HIB -x threads -l "upper right" -t candle
+python3 -W ignore $GENERATOR_SCRIPT -d ../candle/results_gramine_tdx_1_6_1/:../candle/results_gramine_tdx_1_6_2/:../candle/results_gramine_tdx_1_6_3/ -a candle -e default -m HIB -x threads -l "upper right" -t candle_no_annot
+python3 -W ignore $GENERATOR_SCRIPT -d ../candle/results_gramine_tdx_1_6_1/:../candle/results_gramine_tdx_1_6_2/:../candle/results_gramine_tdx_1_6_3/-a candle -e default -n absolute -m HIB -x threads -l "upper right" --error_bar -t candle_error_bars
+python3 -W ignore $GENERATOR_SCRIPT -d ../candle/results_gramine_tdx_1_6_1/:../candle/results_gramine_tdx_1_6_2/:../candle/results_gramine_tdx_1_6_3/ -a candle -e default -n overhead -m HIB -x threads -l "upper right" -t candle_overhead
 
 # blender
 python3 -W ignore $GENERATOR_SCRIPT -d ../blender/results_gramine_tdx_1_6_1/ -a blender -e default -n absolute -m LIB -x threads -l "upper right" -t blender_single_res

@@ -7,10 +7,10 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 
 import seaborn as sb
-palette = sb.color_palette("pastel")
+palette = sb.color_palette("pastel", 20)
 colour = palette
-hatch = ["", "//", "..", "", "++", "", "", "//", "..", "", "++", ""]
-markers = ['o', 's', '+', 'x', 'D', '*', 'o', 's', '+', 'x', 'D', '*']
+hatch = ["", "//", "..", "", "++", "", "", "//", "..", "", "++", "", "", ""]
+markers = ['o', 's', '+', 'x', 'D', '*', 'o', 's', '+', 'x', 'D', '*', 'o', 's']
 
 variants_plot_sequence = [
   "Native",
